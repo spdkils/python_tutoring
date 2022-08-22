@@ -372,7 +372,7 @@ def main() -> int:
                 val = -1 if event == "Up" else 1
                 if all((figure_mapping, parts)):
                     for idx in lb.get_indexes()[::-val]:
-                        if idx + val > 0:
+                        if 0 <= idx + val < len(parts):
                             parts[idx + val], parts[idx] = parts[idx], parts[idx + val]
                     window.write_event_value("--REDRAW--", val)
             case ("Save Copy", values):
