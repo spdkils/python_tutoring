@@ -265,6 +265,7 @@ def main() -> int:
         [sg.Button("Up"), sg.Button("Down")],
         [slider],
         [g1],
+        [sg.Text(text="", key="-metadata-")],
     ]
     right_col = [
         [
@@ -330,6 +331,7 @@ def main() -> int:
                 if not all((header, footer, parts)):
                     sg.popup("File did not parse correctly.")
                     continue
+                window["-metadata-"].update(value="\n".join(header.splitlines()[1:9]))
                 figure_mapping = draw_parts(parts, g1)
                 slider.update(range=(0, len(figure_mapping)))
                 slider.update(value=0)
