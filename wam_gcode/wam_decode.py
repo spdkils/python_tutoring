@@ -20,11 +20,12 @@ just to learn how to do it.)
 
 """
 
-import pathlib
+import glob
 import re
 import sys
 from collections import namedtuple
 from dataclasses import dataclass, field
+from pathlib import Path
 from random import choice
 
 import PySimpleGUI as sg
@@ -51,6 +52,7 @@ class Part:
     g_code: str = field(repr=False)
     bbox: BBox
     used: bool = False
+    parent: "Part" = None  # Used to deal with a small part that may get inside the rectangular bbox of another part.
 
     def __hash__(self):
         return hash(self.g_code)
@@ -58,7 +60,7 @@ class Part:
 
 def read_file(filename: str) -> str:
     """Reads the provided file in UTF-8"""
-    if pathlib.Path(filename).is_file():
+    if Path(filename).is_file():
         with open(filename, "r", encoding="utf-8") as f:
             return f.read()
     return ""
@@ -140,12 +142,20 @@ def reorder_parts(parts: list[Part]) -> list[Part]:
     # I'm sure I could do this recursivly and more elegantly to deal with deep nesting
     # That is a problem for later.
     blocks = {}
-
+    for part in parts:
+        part.used = False
+        part.parent = None
     for part1 in parts:
         for part2 in parts:
             if part1 != part2 and a_encloses_b(part1.bbox, part2.bbox):
-                blocks.setdefault(part1, []).append(part2)
-                part1.used = part2.used = True
+                if part2.parent is None:
+                    part2.parent = part1
+                    part1.used = part2.used = True
+                    blocks.setdefault(part1, []).append(part2)
+                elif a_encloses_b(part1.bbox, part2.parent.bbox):
+                    part2.parent.parent = part1
+                    part1.used = part2.parent.used = True
+                    blocks.setdefault(part1, []).append(part2.parent)
     for part in parts:
         if not part.used:
             blocks.setdefault(part, [])
@@ -162,9 +172,9 @@ def reorder_parts(parts: list[Part]) -> list[Part]:
     return new_order
 
 
-def write_file(old_filename: pathlib.Path, header: str, footer: str, parts: list[Part]):
+def write_file(old_filename: Path, header: str, footer: str, parts: list[Part]):
     """Write the output file in the same folder as the input, adding a t_"""
-    path = pathlib.Path(old_filename)
+    path = Path(old_filename)
     new_filename = path.parents[0] / f"t_{path.name}"
     with open(new_filename, mode="w", encoding="utf-8") as f:
         print(header, end="", file=f)
@@ -192,6 +202,11 @@ def draw_parts(
         idx: graph.draw_lines(part.points, color=color)
         for idx, part in enumerate(parts)
     }
+
+
+def list_files(folder: str):
+    if Path(folder).is_dir():
+        return [Path(x).name for x in glob.glob(folder + "/*.gcode")]
 
 
 def main() -> int:
@@ -232,12 +247,12 @@ def main() -> int:
     # Layout of the gui
     left_col = [
         [
-            sg.FileBrowse(file_types=(("G-Code", "*.gcode"),)),
+            sg.FolderBrowse("Select Folder"),
             sg.Input(
-                "Filename: Empty",
+                ".",
                 readonly=True,
                 enable_events=True,
-                key="-filename-",
+                key="-foldername-",
                 text_color="black",
             ),
         ],
@@ -251,7 +266,18 @@ def main() -> int:
         [slider],
         [g1],
     ]
-    layout = [[lb, sg.Column(left_col)]]
+    right_col = [
+        [
+            sg.Listbox(
+                values=[list_files(".")],
+                key="Files",
+                size=(30, 30),
+                expand_y=True,
+                enable_events=True,
+            )
+        ],
+    ]
+    layout = [[lb, sg.Column(left_col), sg.Column(right_col)]]
 
     # GUI creation and execution loop.
 
@@ -272,6 +298,9 @@ def main() -> int:
             case (sg.WIN_CLOSED | "Exit", *_):
                 window.close()
                 return 0
+            case ("-foldername-", {"Select Folder": folder}):
+                window["Files"].update(values=list_files(folder))
+
             case ("-raw_image-", {"-raw_image-": pos}):
                 idxs = ()
                 for x in (-1, 0, 1):
@@ -293,9 +322,14 @@ def main() -> int:
                         g1.tk_canvas.itemconfig(figure_mapping[fig], fill="white smoke")
                 selected = tuple(x for x in range(0, int(pos)))
                 lb.update(set_to_index=selected, scroll_to_index=int(pos) - 1)
-            case ("-filename-", values):
-                gcode = read_file(values["Browse"])
+            case ("Files", values):
+                if not values["Files"]:
+                    continue
+                gcode = read_file(Path(values["Select Folder"]) / values["Files"][0])
                 header, footer, parts = parse_gcode(gcode)
+                if not all((header, footer, parts)):
+                    sg.popup("File did not parse correctly.")
+                    continue
                 figure_mapping = draw_parts(parts, g1)
                 slider.update(range=(0, len(figure_mapping)))
                 slider.update(value=0)
@@ -304,12 +338,14 @@ def main() -> int:
                 if not all((header, footer, parts)):
                     continue
                 figure_mapping = draw_parts(parts, g1)
+                slider.update(value=0)
                 lb.update(values=figure_mapping)
             case ("Rearrange", *_):
                 if not all((header, footer, parts)):
                     continue
                 parts = reorder_parts(parts)
                 figure_mapping = draw_parts(parts, g1)
+                slider.update(value=0)
                 lb.update(values=figure_mapping)
             case ("--REDRAW--", {"--REDRAW--": num}):
                 if not all((header, footer, parts)):
@@ -336,12 +372,17 @@ def main() -> int:
                 val = -1 if event == "Up" else 1
                 if all((figure_mapping, parts)):
                     for idx in lb.get_indexes()[::-val]:
-                        if idx > 0:
+                        if idx + val > 0:
                             parts[idx + val], parts[idx] = parts[idx], parts[idx + val]
                     window.write_event_value("--REDRAW--", val)
             case ("Save Copy", values):
-                if all((values["Browse"], header, footer, parts)):
-                    write_file(values["Browse"], header, footer, parts)
+                if all((values["Files"], header, footer, parts)):
+                    write_file(
+                        Path(values["Select Folder"]) / values["Files"][0],
+                        header,
+                        footer,
+                        parts,
+                    )
             case (*args,):
                 print("No clue what just happend? You added an event without a case?")
                 print(args)
