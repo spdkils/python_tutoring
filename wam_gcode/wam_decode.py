@@ -249,7 +249,7 @@ def main() -> int:
         [
             sg.FolderBrowse("Select Folder"),
             sg.Input(
-                ".",
+                "",
                 readonly=True,
                 enable_events=True,
                 key="-foldername-",
@@ -269,7 +269,7 @@ def main() -> int:
     right_col = [
         [
             sg.Listbox(
-                values=[list_files(".")],
+                values=list_files("."),
                 key="Files",
                 size=(30, 30),
                 expand_y=True,
