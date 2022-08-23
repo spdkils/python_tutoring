@@ -196,14 +196,17 @@ def limit(num: int, min_allowed: int, max_allowed: int) -> int:
 
 
 def draw_parts(
-    parts: list[Part], graph: sg.Graph, color="white smoke"
+    parts: list[Part], graph: sg.Graph, slider: sg.Slider, color="white smoke"
 ) -> dict[int, int]:
     """Draws the parts, and gives back the part mapping"""
     graph.erase()
-    return {
+    figures = {
         idx: graph.draw_lines(part.points, color=color)
         for idx, part in enumerate(parts)
     }
+    slider.update(range=(0, len(figures)))
+    slider.update(value=0)
+    return figures
 
 
 def list_files(folder: str):
@@ -312,14 +315,14 @@ def main() -> int:
                         )
                 locs = tuple(list(figure_mapping.values()).index(idx) for idx in idxs)
                 if locs:
-                    window["Parts"].update(
+                    list_box.update(
                         set_to_index=locs + list_box.get_indexes(),
                         scroll_to_index=locs[0],
                     )
                 for idx in locs:
                     wazer_bed.tk_canvas.itemconfig(figure_mapping[idx], fill="red")
             case ("-animate-", {"-animate-": pos}):
-                for idx, fig in enumerate(window["Parts"].Values):
+                for idx, fig in enumerate(list_box.get_list_values()):
                     if idx < pos:
                         wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="red")
                     else:
@@ -337,48 +340,42 @@ def main() -> int:
                     sg.popup("File did not parse correctly.")
                     continue
                 window["-metadata-"].update(value="\n".join(header.splitlines()[1:9]))
-                figure_mapping = draw_parts(parts, wazer_bed)
-                slider.update(range=(0, len(figure_mapping)))
-                slider.update(value=0)
+                figure_mapping = draw_parts(parts, wazer_bed, slider)
                 list_box.update(values=figure_mapping)
             case ("Re-Draw", values):
                 if not all((header, footer, parts)):
                     continue
-                figure_mapping = draw_parts(parts, wazer_bed)
-                slider.update(value=0)
+                figure_mapping = draw_parts(parts, wazer_bed, slider)
                 list_box.update(values=figure_mapping)
             case ("Rearrange", *_):
                 if not all((header, footer, parts)):
                     continue
                 parts = reorder_parts(parts)
-                figure_mapping = draw_parts(parts, wazer_bed)
-                slider.update(value=0)
+                figure_mapping = draw_parts(parts, wazer_bed, slider)
                 list_box.update(values=figure_mapping)
             case ("--REDRAW--", {"--REDRAW--": num}):
                 if not all((header, footer, parts)):
                     continue
-                figure_mapping = draw_parts(parts, wazer_bed)
+                figure_mapping = draw_parts(parts, wazer_bed, slider)
                 new_ind = [
                     limit(x + num, 0, len(list_box.get_list_values()) - 1)
                     for x in list_box.get_indexes()
                 ]
-                scroll = 0 if not new_ind else new_ind[0]
+                scroll = 0 if not new_ind else min(new_ind)
                 list_box.update(
                     values=figure_mapping, set_to_index=new_ind, scroll_to_index=scroll
                 )
-                for fig in window["Parts"].Values:
+                for fig in list_box.get_list_values():
                     wazer_bed.tk_canvas.itemconfig(
-                        figure_mapping[fig], fill="white smoke"
+                        figure_mapping[fig],
+                        fill="white smoke" if fig not in list_box.get() else "red",
                     )
-                for fig in new_ind:
-                    wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="red")
             case ("Parts", values):
-                for fig in window["Parts"].Values:
+                for fig in list_box.get_list_values():
                     wazer_bed.tk_canvas.itemconfig(
-                        figure_mapping[fig], fill="white smoke"
+                        figure_mapping[fig],
+                        fill="white smoke" if fig not in list_box.get() else "red",
                     )
-                for fig in values["Parts"]:
-                    wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="red")
             case (event, values) if event in ("Up", "Down"):
                 val = -1 if event == "Up" else 1
                 if all((figure_mapping, parts)):
