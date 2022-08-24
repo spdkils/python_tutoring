@@ -215,12 +215,8 @@ def list_files(folder: str):
         return [Path(x).name for x in glob.glob(folder + "/*.gcode")]
 
 
-def main() -> int:
-    """G_Code preview and re-order for WAM
-
-    Returns:
-        int: Exit code for system.
-    """
+def create_window():
+    "Create the window object/layout."
     sg.theme(choice(sg.theme_list()))
 
     # Graph objects for drawings sorta like local globals, smells bad, but I'm in a hurry.
@@ -235,7 +231,7 @@ def main() -> int:
     )
     list_box = sg.Listbox(
         values=[],
-        key="Parts",
+        key="-CUTS-",
         size=(20, 30),
         select_mode=sg.LISTBOX_SELECT_MODE_MULTIPLE,
         expand_y=True,
@@ -275,7 +271,7 @@ def main() -> int:
         [
             sg.Listbox(
                 values=list_files("."),
-                key="Files",
+                key="-FILES-",
                 size=(30, 30),
                 expand_y=True,
                 enable_events=True,
@@ -286,10 +282,25 @@ def main() -> int:
 
     # GUI creation and execution loop.
 
-    window = sg.Window("", layout, use_custom_titlebar=True)
+    return sg.Window("", layout, use_custom_titlebar=True)
+
+
+def main() -> int:
+    """G_Code preview and re-order for WAM
+
+    Returns:
+        int: Exit code for system.
+    """
+    # pylint: disable=no-member
+
+    window = create_window()
 
     # State of application
     # If this was object oriented these would be properites
+    wazer_bed: sg.Graph = window["-raw_image-"]
+    cuts: sg.Listbox = window["-CUTS-"]
+    files: sg.Listbox = window["-FILES-"]
+    slider: sg.Slider = window["-animate-"]
     gcode = ""
     header = footer = parts = None
     figure_mapping = {}
@@ -304,8 +315,7 @@ def main() -> int:
                 window.close()
                 return 0
             case ("-foldername-", {"Select Folder": folder}):
-                window["Files"].update(values=list_files(folder))
-
+                files.update(values=list_files(folder))
             case ("-raw_image-", {"-raw_image-": pos}):
                 idxs = ()
                 for x_wiggle in (-1, 0, 1):
@@ -315,14 +325,14 @@ def main() -> int:
                         )
                 locs = tuple(list(figure_mapping.values()).index(idx) for idx in idxs)
                 if locs:
-                    list_box.update(
-                        set_to_index=locs + list_box.get_indexes(),
+                    cuts.update(
+                        set_to_index=locs + cuts.get_indexes(),
                         scroll_to_index=locs[0],
                     )
                 for idx in locs:
                     wazer_bed.tk_canvas.itemconfig(figure_mapping[idx], fill="red")
             case ("-animate-", {"-animate-": pos}):
-                for idx, fig in enumerate(list_box.get_list_values()):
+                for idx, fig in enumerate(cuts.get_list_values()):
                     if idx < pos:
                         wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="red")
                     else:
@@ -330,63 +340,63 @@ def main() -> int:
                             figure_mapping[fig], fill="white smoke"
                         )
                 selected = tuple(x for x in range(0, int(pos)))
-                list_box.update(set_to_index=selected, scroll_to_index=int(pos) - 1)
-            case ("Files", values):
-                if not values["Files"]:
+                cuts.update(set_to_index=selected, scroll_to_index=int(pos) - 1)
+            case ("-FILES-", values):
+                if not values["-FILES-"]:
                     continue
-                gcode = read_file(Path(values["Select Folder"]) / values["Files"][0])
+                gcode = read_file(Path(values["Select Folder"]) / values["-FILES-"][0])
                 header, footer, parts = parse_gcode(gcode)
                 if not all((header, footer, parts)):
                     sg.popup("File did not parse correctly.")
                     continue
                 window["-metadata-"].update(value="\n".join(header.splitlines()[1:9]))
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
-                list_box.update(values=figure_mapping)
+                cuts.update(values=figure_mapping)
             case ("Re-Draw", values):
                 if not all((header, footer, parts)):
                     continue
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
-                list_box.update(values=figure_mapping)
+                cuts.update(values=figure_mapping)
             case ("Rearrange", *_):
                 if not all((header, footer, parts)):
                     continue
                 parts = reorder_parts(parts)
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
-                list_box.update(values=figure_mapping)
+                cuts.update(values=figure_mapping)
             case ("--REDRAW--", {"--REDRAW--": num}):
                 if not all((header, footer, parts)):
                     continue
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
                 new_ind = [
-                    limit(x + num, 0, len(list_box.get_list_values()) - 1)
-                    for x in list_box.get_indexes()
+                    limit(x + num, 0, len(cuts.get_list_values()) - 1)
+                    for x in cuts.get_indexes()
                 ]
                 scroll = 0 if not new_ind else min(new_ind)
-                list_box.update(
+                cuts.update(
                     values=figure_mapping, set_to_index=new_ind, scroll_to_index=scroll
                 )
-                for fig in list_box.get_list_values():
+                for fig in cuts.get_list_values():
                     wazer_bed.tk_canvas.itemconfig(
                         figure_mapping[fig],
-                        fill="white smoke" if fig not in list_box.get() else "red",
+                        fill="white smoke" if fig not in cuts.get() else "red",
                     )
-            case ("Parts", values):
-                for fig in list_box.get_list_values():
+            case ("-CUTS-", values):
+                for fig in cuts.get_list_values():
                     wazer_bed.tk_canvas.itemconfig(
                         figure_mapping[fig],
-                        fill="white smoke" if fig not in list_box.get() else "red",
+                        fill="white smoke" if fig not in cuts.get() else "red",
                     )
             case (event, values) if event in ("Up", "Down"):
                 val = -1 if event == "Up" else 1
                 if all((figure_mapping, parts)):
-                    for idx in list_box.get_indexes()[::-val]:
+                    for idx in cuts.get_indexes()[::-val]:
                         if 0 <= idx + val < len(parts):
                             parts[idx + val], parts[idx] = parts[idx], parts[idx + val]
                     window.write_event_value("--REDRAW--", val)
             case ("Save Copy", values):
-                if all((values["Files"], header, footer, parts)):
+                if all((values["-FILES-"], header, footer, parts)):
                     write_file(
-                        Path(values["Select Folder"]) / values["Files"][0],
+                        Path(values["Select Folder"]) / values["-FILES-"][0],
                         header,
                         footer,
                         parts,
