@@ -227,7 +227,7 @@ def create_window():
         float_values=True,
         background_color="black",
         enable_events=True,
-        key="-raw_image-",
+        key="-GRAPH-",
     )
     list_box = sg.Listbox(
         values=[],
@@ -241,7 +241,7 @@ def create_window():
         (0, 0),
         orientation="horizontal",
         enable_events=True,
-        key="-animate-",
+        key="-SLIDER-",
         expand_x=True,
     )
     # Layout of the gui
@@ -297,10 +297,10 @@ def main() -> int:
 
     # State of application
     # If this was object oriented these would be properites
-    wazer_bed: sg.Graph = window["-raw_image-"]
+    wazer_bed: sg.Graph = window["-GRAPH-"]
     cuts: sg.Listbox = window["-CUTS-"]
     files: sg.Listbox = window["-FILES-"]
-    slider: sg.Slider = window["-animate-"]
+    slider: sg.Slider = window["-SLIDER-"]
     gcode = ""
     header = footer = parts = None
     figure_mapping = {}
@@ -316,7 +316,7 @@ def main() -> int:
                 return 0
             case ("-foldername-", {"Select Folder": folder}):
                 files.update(values=list_files(folder))
-            case ("-raw_image-", {"-raw_image-": pos}):
+            case ("-GRAPH-", {"-GRAPH-": pos}):
                 idxs = ()
                 for x_wiggle in (-1, 0, 1):
                     for y_wiggle in (-1, 0, 1):
@@ -331,7 +331,7 @@ def main() -> int:
                     )
                 for idx in locs:
                     wazer_bed.tk_canvas.itemconfig(figure_mapping[idx], fill="red")
-            case ("-animate-", {"-animate-": pos}):
+            case ("-SLIDER-", {"-SLIDER-": pos}):
                 for idx, fig in enumerate(cuts.get_list_values()):
                     if idx < pos:
                         wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="red")
