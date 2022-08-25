@@ -212,7 +212,7 @@ def draw_parts(
 def list_files(folder: str):
     """Just list gcode files in supplied folder"""
     if Path(folder).is_dir():
-        return [Path(x).name for x in glob.glob(folder + "/*.gcode")]
+        return sorted([Path(x).name for x in glob.glob(folder + "/*.gcode")])
 
 
 def create_window():
@@ -354,7 +354,6 @@ def main() -> int:
             case ("-FILES-", values):
                 if not values["-FILES-"]:
                     continue
-                print(values)
                 gcode = read_file(Path(values["Select Folder"]) / values["-FILES-"][0])
                 header, footer, parts = parse_gcode(gcode)
                 if not all((header, footer, parts)):
