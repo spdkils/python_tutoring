@@ -265,7 +265,7 @@ def create_window():
         [sg.Button("Up"), sg.Button("Down")],
         [slider],
         [wazer_bed],
-        [sg.Text(text="", key="-metadata-")],
+        [sg.Text(text="", key="-METADATA-")],
     ]
     right_col = [
         [
@@ -282,7 +282,7 @@ def create_window():
 
     # GUI creation and execution loop.
 
-    return sg.Window("", layout, use_custom_titlebar=True)
+    return sg.Window("", layout, finalize=True)
 
 
 def main() -> int:
@@ -300,6 +300,8 @@ def main() -> int:
     wazer_bed: sg.Graph = window["-GRAPH-"]
     cuts: sg.Listbox = window["-CUTS-"]
     files: sg.Listbox = window["-FILES-"]
+    window.bind("<Down>", "-DOWN-")
+    window.bind("<Up>", "-UP-")
     slider: sg.Slider = window["-SLIDER-"]
     gcode = ""
     header = footer = parts = None
@@ -314,6 +316,14 @@ def main() -> int:
             case (sg.WIN_CLOSED | "Exit", *_):
                 window.close()
                 return 0
+            case ("-DOWN-", values):
+                if window.find_element_with_focus() == files and files.get_indexes():
+                    files.update(set_to_index=files.get_indexes()[0] + 1)
+                    window.write_event_value("-FILES-", files.get())
+            case ("-UP-", values):
+                if window.find_element_with_focus() == files and files.get_indexes():
+                    files.update(set_to_index=files.get_indexes()[0] - 1)
+                    window.write_event_value("-FILES-", files.get())
             case ("-foldername-", {"Select Folder": folder}):
                 files.update(values=list_files(folder))
             case ("-GRAPH-", {"-GRAPH-": pos}):
@@ -344,12 +354,13 @@ def main() -> int:
             case ("-FILES-", values):
                 if not values["-FILES-"]:
                     continue
+                print(values)
                 gcode = read_file(Path(values["Select Folder"]) / values["-FILES-"][0])
                 header, footer, parts = parse_gcode(gcode)
                 if not all((header, footer, parts)):
                     sg.popup("File did not parse correctly.")
                     continue
-                window["-metadata-"].update(value="\n".join(header.splitlines()[1:9]))
+                window["-METADATA-"].update(value="\n".join(header.splitlines()[1:9]))
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
                 cuts.update(values=figure_mapping)
             case ("Re-Draw", values):
@@ -403,9 +414,8 @@ def main() -> int:
                     )
             case (*args,):
                 print("No clue what just happend? You added an event without a case?")
+                print(window.find_element_with_focus())
                 print(args)
-                window.close()
-                return 1
 
 
 if __name__ == "__main__":
