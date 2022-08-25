@@ -265,20 +265,17 @@ def create_window():
         [sg.Button("Up"), sg.Button("Down")],
         [slider],
         [wazer_bed],
-        [sg.Text(text="", key="-METADATA-")],
+        [sg.Text(text="\n\n\n\n\n\n\n\n", key="-METADATA-")],
     ]
-    right_col = [
-        [
-            sg.Listbox(
-                values=list_files("."),
-                key="-FILES-",
-                size=(30, 30),
-                expand_y=True,
-                enable_events=True,
-            )
-        ],
-    ]
-    layout = [[list_box, sg.Column(left_col), sg.Column(right_col)]]
+    right_col = sg.Listbox(
+        values=list_files("."),
+        key="-FILES-",
+        size=(30, 30),
+        expand_y=True,
+        enable_events=True,
+    )
+
+    layout = [[list_box, sg.Column(left_col), right_col]]
 
     # GUI creation and execution loop.
 
