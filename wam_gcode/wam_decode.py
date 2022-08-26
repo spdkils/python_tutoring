@@ -1,10 +1,7 @@
 """
 This is a gcode re-arranger for the WAZER generated code.
 
-This code was hacked together after a few days and HAS BUGS! User be warned.
-The one KNOWN bug is the fact it will probably fail to deal with 3 deep nested parts.
-(I haven't even tested that, I just fear it will blow up, or do something wrong.)
-
+This code was hacked together after a few days and may contain errors.
 
 I created this because after 8 months of use, I have run across many cuts
 that the default cut order limits the machines capabilities.
@@ -130,11 +127,10 @@ def reorder_parts(parts: list[Part]) -> list[Part]:
     Currently it simply takes each section of gcode (G0 bookends)
     Determines if there are any bounding boxes that wholely fall
     inside the part it's looking at, and if there is... It considers
-    it a child part. (This will BUG out if you have a part in a part in a part!!!)
-
+    it a child part.
     Once it knows parts that have parts inside them, it orders them by some psudo rows
     then children parts are drawn first, then the part they are contained in.
-    (TODO: maybe make this recursive to deal with the nesting issue.)
+    I have confirmed this works with fairly complex test drawings.
     """
 
     # I'm sure I could do this recursivly and more elegantly to deal with deep nesting
@@ -229,7 +225,7 @@ def create_window():
         enable_events=True,
         key="-GRAPH-",
     )
-    list_box = sg.Listbox(
+    cuts = sg.Listbox(
         values=[],
         key="-CUTS-",
         size=(20, 30),
@@ -245,7 +241,7 @@ def create_window():
         expand_x=True,
     )
     # Layout of the gui
-    left_col = [
+    middle_column = [
         [
             sg.FolderBrowse("Select Folder"),
             sg.Input(
@@ -260,14 +256,13 @@ def create_window():
             sg.Button("Re-Draw"),
             sg.Button("Rearrange"),
             sg.Button("Save Copy"),
-            sg.Button("Exit"),
         ],
         [sg.Button("Up"), sg.Button("Down")],
         [slider],
         [wazer_bed],
         [sg.Text(text="\n\n\n\n\n\n\n\n", key="-METADATA-")],
     ]
-    right_col = sg.Listbox(
+    files = sg.Listbox(
         values=list_files("."),
         key="-FILES-",
         size=(30, 30),
@@ -275,7 +270,7 @@ def create_window():
         enable_events=True,
     )
 
-    layout = [[list_box, sg.Column(left_col), right_col]]
+    layout = [[cuts, sg.Column(middle_column), files]]
 
     # GUI creation and execution loop.
 
@@ -310,16 +305,20 @@ def main() -> int:
         # okay this got out of hand, lots of repitition in here
         # refactor and functionize this soon(tm)
         match window.read():
-            case (sg.WIN_CLOSED | "Exit", *_):
+            case (sg.WIN_CLOSED, *_):
                 window.close()
                 return 0
             case ("-DOWN-", values):
                 if window.find_element_with_focus() == files and files.get_indexes():
-                    files.update(set_to_index=files.get_indexes()[0] + 1)
+                    files.update(
+                        set_to_index=min(
+                            len(files.get_list_values()) - 1, files.get_indexes()[0] + 1
+                        )
+                    )
                     window.write_event_value("-FILES-", files.get())
             case ("-UP-", values):
                 if window.find_element_with_focus() == files and files.get_indexes():
-                    files.update(set_to_index=files.get_indexes()[0] - 1)
+                    files.update(set_to_index=max(0, files.get_indexes()[0] - 1))
                     window.write_event_value("-FILES-", files.get())
             case ("-foldername-", {"Select Folder": folder}):
                 files.update(values=list_files(folder))
