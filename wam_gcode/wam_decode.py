@@ -15,6 +15,7 @@ It has really three main use cases.
 """
 
 import glob
+import os
 import re
 import sys
 from collections import namedtuple
@@ -78,11 +79,7 @@ def parts_by_row(parts: list[Part]):
     while new_parts:
         rows.append(
             sorted(
-                [
-                    x
-                    for x in new_parts
-                    if new_parts[0].bbox.min_y < x.bbox.max_y or x == new_parts[0]
-                ],
+                [x for x in new_parts if new_parts[0].bbox.min_y < x.bbox.max_y or x == new_parts[0]],
                 key=lambda x: x.bbox.min_x,
                 reverse=reverse_it,
             )
@@ -105,9 +102,7 @@ def parse_gcode(gcode: str) -> tuple[str, str, list[Part]]:
     # hacked this up three times I should probably deal with the x/y as pairs in the regex
     # Meh...
     regex = "(-?\\d+(?:\\.\\d+)?)"
-    for match in re.finditer(
-        BLOCK_START_REGEX + BLOCK_MIDDLE_REGEX + BLOCK_END_REGEX, gcode
-    ):
+    for match in re.finditer(BLOCK_START_REGEX + BLOCK_MIDDLE_REGEX + BLOCK_END_REGEX, gcode):
         x_points = [float(x) for x in re.findall("X" + regex, match.group(0))]
         y_points = [float(y) for y in re.findall("Y" + regex, match.group(0))]
         part = Part(
@@ -148,9 +143,7 @@ def reorder_parts(parts: list[Part]) -> list[Part]:
     for part in parts:
         if not part.used:
             blocks.setdefault(part, [])
-    sorted_blocks: dict[Part, list[Part]] = sorted(
-        blocks, key=lambda x: x.bbox.max_y, reverse=True
-    )
+    sorted_blocks: dict[Part, list[Part]] = sorted(blocks, key=lambda x: x.bbox.max_y, reverse=True)
     rows = parts_by_row(sorted_blocks)
     new_order = []
     for row in rows:
@@ -191,24 +184,19 @@ def limit(num: int, min_allowed: int, max_allowed: int) -> int:
         return num
 
 
-def draw_parts(
-    parts: list[Part], graph: sg.Graph, slider: sg.Slider, color="white smoke"
-) -> dict[int, int]:
+def draw_parts(parts: list[Part], graph: sg.Graph, slider: sg.Slider, color="white smoke") -> dict[int, int]:
     """Draws the parts, and gives back the part mapping"""
     graph.erase()
-    figures = {
-        idx: graph.draw_lines(part.points, color=color)
-        for idx, part in enumerate(parts)
-    }
+    figures = {idx: graph.draw_lines(part.points, color=color) for idx, part in enumerate(parts)}
     slider.update(range=(0, len(figures)))
     slider.update(value=0)
     return figures
 
 
-def list_files(folder: str):
+def list_files(folder: str, search="*"):
     """Just list gcode files in supplied folder"""
     if Path(folder).is_dir():
-        return sorted([Path(x).name for x in glob.glob(folder + "/*.gcode")])
+        return sorted([Path(x).name for x in glob.glob(folder + f"/{search}.gcode")])
 
 
 def create_window():
@@ -252,10 +240,12 @@ def create_window():
                 text_color="black",
             ),
         ],
+        [sg.Input("", enable_events=True, key="-search-"), sg.Text("Search")],
         [
             sg.Button("Re-Draw"),
             sg.Button("Rearrange"),
             sg.Button("Save Copy"),
+            sg.Button("Delete"),
         ],
         [sg.Button("Up"), sg.Button("Down")],
         [slider],
@@ -310,11 +300,7 @@ def main() -> int:
                 return 0
             case ("-DOWN-", values):
                 if window.find_element_with_focus() == files and files.get_indexes():
-                    files.update(
-                        set_to_index=min(
-                            len(files.get_list_values()) - 1, files.get_indexes()[0] + 1
-                        )
-                    )
+                    files.update(set_to_index=min(len(files.get_list_values()) - 1, files.get_indexes()[0] + 1))
                     window.write_event_value("-FILES-", files.get())
             case ("-UP-", values):
                 if window.find_element_with_focus() == files and files.get_indexes():
@@ -326,9 +312,7 @@ def main() -> int:
                 idxs = ()
                 for x_wiggle in (-1, 0, 1):
                     for y_wiggle in (-1, 0, 1):
-                        idxs += wazer_bed.get_figures_at_location(
-                            (pos[0] + x_wiggle, pos[1] + y_wiggle)
-                        )
+                        idxs += wazer_bed.get_figures_at_location((pos[0] + x_wiggle, pos[1] + y_wiggle))
                 locs = tuple(list(figure_mapping.values()).index(idx) for idx in idxs)
                 if locs:
                     cuts.update(
@@ -342,9 +326,7 @@ def main() -> int:
                     if idx < pos:
                         wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="red")
                     else:
-                        wazer_bed.tk_canvas.itemconfig(
-                            figure_mapping[fig], fill="white smoke"
-                        )
+                        wazer_bed.tk_canvas.itemconfig(figure_mapping[fig], fill="white smoke")
                 selected = tuple(x for x in range(0, int(pos)))
                 cuts.update(set_to_index=selected, scroll_to_index=int(pos) - 1)
             case ("-FILES-", values):
@@ -373,14 +355,9 @@ def main() -> int:
                 if not all((header, footer, parts)):
                     continue
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
-                new_ind = [
-                    limit(x + num, 0, len(cuts.get_list_values()) - 1)
-                    for x in cuts.get_indexes()
-                ]
+                new_ind = [limit(x + num, 0, len(cuts.get_list_values()) - 1) for x in cuts.get_indexes()]
                 scroll = 0 if not new_ind else min(new_ind)
-                cuts.update(
-                    values=figure_mapping, set_to_index=new_ind, scroll_to_index=scroll
-                )
+                cuts.update(values=figure_mapping, set_to_index=new_ind, scroll_to_index=scroll)
                 for fig in cuts.get_list_values():
                     wazer_bed.tk_canvas.itemconfig(
                         figure_mapping[fig],
@@ -407,6 +384,17 @@ def main() -> int:
                         footer,
                         parts,
                     )
+                    window.write_event_value("-search-", values["-search-"])
+            case ("Delete", values):
+                if all((values["-FILES-"], header, footer, parts)):
+                    os.remove(Path(values["Select Folder"]) / values["-FILES-"][0])
+                    window.write_event_value("-search-", values["-search-"])
+            case ("-search-", {"-search-": search_str}):
+                if "folder" in locals():
+                    files.update(values=list_files(folder, search=f"*{search_str}*"))
+                    files.update(set_to_index=0)
+                    window.write_event_value("-FILES-", files.get())
+
             case (*args,):
                 print("No clue what just happend? You added an event without a case?")
                 print(window.find_element_with_focus())
