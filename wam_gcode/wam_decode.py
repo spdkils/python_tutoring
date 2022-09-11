@@ -193,10 +193,13 @@ def draw_parts(parts: list[Part], graph: sg.Graph, slider: sg.Slider, color="whi
     return figures
 
 
-def list_files(folder: str, search="*"):
+def list_files(folder: str, search=""):
     """Just list gcode files in supplied folder"""
     if Path(folder).is_dir():
-        return sorted([Path(x).name for x in glob.glob(folder + f"/{search}.gcode")])
+        return [
+            x for x in sorted([Path(x).name for x in glob.glob(folder + "/*.gcode")]) if search.lower() in x.lower()
+        ]
+    return []
 
 
 def create_window():
@@ -391,7 +394,7 @@ def main() -> int:
                     window.write_event_value("-search-", values["-search-"])
             case ("-search-", {"-search-": search_str}):
                 if "folder" in locals():
-                    files.update(values=list_files(folder, search=f"*{search_str}*"))
+                    files.update(values=list_files(folder, search=search_str))
                     files.update(set_to_index=0)
                     window.write_event_value("-FILES-", files.get())
 
