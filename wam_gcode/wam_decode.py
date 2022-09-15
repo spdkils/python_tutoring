@@ -17,6 +17,7 @@ It has really three main use cases.
 import glob
 import os
 import re
+import shutil
 import sys
 from collections import namedtuple
 from dataclasses import dataclass, field
@@ -202,6 +203,35 @@ def list_files(folder: str, search=""):
     return []
 
 
+def rename_popup(text, data):
+
+    layout = [
+        [sg.Text(f"Rename {text}")],
+        [sg.InputText(text, key="-new_name-")],
+        [sg.Button("OK"), sg.Button("CANCEL")],
+    ]
+
+    window = sg.Window("POPUP", layout).Finalize()
+
+    while True:
+        event, values = window.read()
+
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "OK":
+            break
+        elif event == "CANCEL":
+            values["-new_name-"] = None
+            break
+        else:
+            "nada"
+
+    window.close()
+
+    if values and values["-new_name-"]:
+        return values["-new_name-"]
+
+
 def create_window():
     "Create the window object/layout."
     sg.theme(choice(sg.theme_list()))
@@ -249,6 +279,7 @@ def create_window():
             sg.Button("Rearrange"),
             sg.Button("Save Copy"),
             sg.Button("Delete"),
+            sg.Button("Rename"),
         ],
         [sg.Button("Up"), sg.Button("Down")],
         [slider],
@@ -348,6 +379,18 @@ def main() -> int:
                     continue
                 figure_mapping = draw_parts(parts, wazer_bed, slider)
                 cuts.update(values=figure_mapping)
+            case ("Rename", values):
+                if values["-FILES-"]:
+                    if new_name := rename_popup(values["-FILES-"][0], values):
+                        shutil.move(
+                            Path(values["Select Folder"]) / values["-FILES-"][0],
+                            Path(values["Select Folder"]) / new_name,
+                        )
+                        if "folder" in locals():
+                            files.update(values=list_files(folder, search=search_str))
+                            files.update(set_to_index=0)
+                            window.write_event_value("-FILES-", files.get())
+
             case ("Rearrange", *_):
                 if not all((header, footer, parts)):
                     continue
@@ -390,8 +433,9 @@ def main() -> int:
                     window.write_event_value("-search-", values["-search-"])
             case ("Delete", values):
                 if all((values["-FILES-"], header, footer, parts)):
-                    os.remove(Path(values["Select Folder"]) / values["-FILES-"][0])
-                    window.write_event_value("-search-", values["-search-"])
+                    if sg.popup_ok_cancel("Delete selected file?") == "OK":
+                        os.remove(Path(values["Select Folder"]) / values["-FILES-"][0])
+                        window.write_event_value("-search-", values["-search-"])
             case ("-search-", {"-search-": search_str}):
                 if "folder" in locals():
                     files.update(values=list_files(folder, search=search_str))
