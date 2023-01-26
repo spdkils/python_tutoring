@@ -390,7 +390,6 @@ def main() -> int:
                             files.update(values=list_files(folder, search=search_str))
                             files.update(set_to_index=0)
                             window.write_event_value("-FILES-", files.get())
-
             case ("Rearrange", *_):
                 if not all((header, footer, parts)):
                     continue
@@ -438,10 +437,17 @@ def main() -> int:
                         window.write_event_value("-search-", values["-search-"])
             case ("-search-", {"-search-": search_str}):
                 if "folder" in locals():
+                    prev_index = files.get_indexes()
+                    if prev_index:
+                        prev_select = files.get_list_values()[prev_index[0]]
                     files.update(values=list_files(folder, search=search_str))
-                    files.update(set_to_index=0)
+                    if prev_select in files.get_list_values():
+                        files.update(set_to_index=files.get_list_values().index(prev_select))
+                    elif prev_index:
+                        files.update(set_to_index=min(len(files.get_list_values()) - 1, max(prev_index[0], 0)))
+                    else:
+                        files.update(set_to_index=0)
                     window.write_event_value("-FILES-", files.get())
-
             case (*args,):
                 print("No clue what just happend? You added an event without a case?")
                 print(window.find_element_with_focus())
