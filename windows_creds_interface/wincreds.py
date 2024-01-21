@@ -98,7 +98,7 @@ def create_generic_credential(target_name: str, username: str, password: str) ->
         ct.create_string_buffer(password.encode("utf-16-le") + b"\x00"),
         ct.POINTER(ct.c_ubyte),
     )
-    credential.Persist = 0x02  # CRED_PERSIST_LOCAL_MACHINE
+    credential.Persist = Persist.LOCAL_MACHINE.value
     credential.UserName = username
     if not advapi32.CredWriteW(ct.byref(credential), 0):
         raise ct.WinError(ct.get_last_error())
