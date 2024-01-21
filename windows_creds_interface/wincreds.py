@@ -1,25 +1,11 @@
 """
-Access windows credentials
-Credentials must be stored in the Windows Credentials Manager in the Control
-Panel. This helper will search for "generic credentials" under the section
-"Windows Credentials"
-Example usage::
-    result = get_generic_credential('foobar')
-    if result:
-        print("NAME:", result.username)
-        print("PASSWORD:", result.password)
-    else:
-        print('No matching credentials found')
+CRUD interface for Windows Credential Manager.
+
 Based on https://gist.github.com/exhuma/a310f927d878b3e5646dc67dfa509b42
 which was based on https://gist.github.com/mrh1997/717b14f5783b49ca14310419fa7f03f6
 
 
 RESOURCE: https://docs.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentialw
-
-Then I hacked on it for a while because I couldn't get the original to work for unicode passwords.
-I need to use this for some secure passwords at work.
-I don't want to install the rather heavy pywin32 package just for this.
-All native python, no dependencies. (Unless you consider Windows a dependency.)
 """
 import ctypes as ct
 import ctypes.wintypes as wt
@@ -73,7 +59,7 @@ class WinCredential(ct.Structure):
 
 def create_generic_credential(target_name: str, username: str, password: str) -> None:
     """
-    Creates a generic credential in the Windows Credential Manager.
+    Creates or updates a generic credential in the Windows Credential Manager.
 
     Args:
         target_name (str): The name of the target for the credential.
@@ -138,9 +124,7 @@ def get_generic_credential(name: str) -> Optional[Credential]:
         wt.LPCWSTR,
         wt.DWORD,
         wt.DWORD,
-        ct.POINTER(
-            ct.POINTER(WinCredential)
-        ),  ## <-- why the double wrap? I'm so confused.
+        ct.POINTER(ct.POINTER(WinCredential)),  ## <-- why the double wrap? I'm so confused.
     ]
 
     cred_ptr = ct.POINTER(WinCredential)()
